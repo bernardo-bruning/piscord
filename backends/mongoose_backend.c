@@ -25,6 +25,8 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
       memcpy(*ctx->res, hm->body.buf, hm->body.len);
       (*ctx->res)[hm->body.len] = '\0';
     }
+  } else if (ctx->res) {
+    *ctx->res = NULL;
   }
 
   ctx->done = true;
@@ -44,18 +46,15 @@ static int mg_backend_post(Backend *self, const char *url, const char *headers, 
     mg_tls_init(c, &opts);
   }
 
+  struct mg_str host = mg_url_host(url);
+  const char *uri = mg_url_uri(url);
   int len = body ? (int)strlen(body) : 0;
+
   mg_printf(c, "POST %s HTTP/1.1\r\nHost: %.*s\r\n%sContent-Length: %d\r\n\r\n",
-            url, (int)mg_url_host(url).len, mg_url_host(url).buf, headers ? headers : "", len);
+            uri, (int)host.len, host.buf, headers ? headers : "", len);
   if (len > 0) mg_send(c, body, len);
 
   while (!ctx.done) mg_mgr_poll(&mgr, 50);
-  
-  if (ctx.status < 200 || ctx.status >= 300) {
-    fprintf(stderr, "HTTP Status: %d\n", ctx.status);
-    if (response && *response) fprintf(stderr, "Discord Response: %s\n", *response);
-  }
-
   mg_mgr_free(&mgr);
   return (ctx.status >= 200 && ctx.status < 300) ? SUCCESS : ERR_HTTP_ERROR;
 }
@@ -73,8 +72,11 @@ static int mg_backend_get(Backend *self, const char *url, const char *headers, c
     mg_tls_init(c, &opts);
   }
 
+  struct mg_str host = mg_url_host(url);
+  const char *uri = mg_url_uri(url);
+
   mg_printf(c, "GET %s HTTP/1.1\r\nHost: %.*s\r\n%s\r\n", 
-            url, (int)mg_url_host(url).len, mg_url_host(url).buf, headers ? headers : "");
+            uri, (int)host.len, host.buf, headers ? headers : "");
 
   while (!ctx.done) mg_mgr_poll(&mgr, 50);
   mg_mgr_free(&mgr);
@@ -89,29 +91,33 @@ static void mg_backend_sleep(Backend *self, int ms) {
   usleep(ms * 1000);
 }
 
-static int mg_backend_json_scanf(const char *json, const char *path, const char *fmt, ...) {
-  if (!json) return 0;
+static int mg_backend_json_scanf(const char *json, const char *path, const char *fmt, void *out, int max) {
+  if (!json || !path || !out) return 0;
   struct mg_str s = mg_str(json);
-  va_list ap;
-  va_start(ap, fmt);
   int res = 0;
 
   if (strcmp(fmt, "%s") == 0) {
-    char *ptr = va_arg(ap, char *), *val = mg_json_get_str(s, path);
-    if (val) { strcpy(ptr, val); free(val); res = 1; }
+    char *val = mg_json_get_str(s, path);
+    if (val) {
+      strncpy((char *)out, val, max - 1);
+      ((char *)out)[max - 1] = '\0';
+      free(val);
+      res = 1;
+    }
   } else if (strcmp(fmt, "%d") == 0) {
-    int *ptr = va_arg(ap, int *);
     long val = mg_json_get_long(s, path, -32768);
-    if (val != -32768) { *ptr = (int)val; res = 1; }
+    if (val != -32768) {
+      *(int *)out = (int)val;
+      res = 1;
+    }
   }
-  va_end(ap);
   return res;
 }
 
 static int mg_backend_json_printf(char *buf, size_t len, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  int res = (int) mg_vsnprintf(buf, len, fmt, &ap); // Fix: Mongoose vsnprintf para %Q
+  int res = (int) mg_vsnprintf(buf, len, fmt, &ap);
   va_end(ap);
   return res;
 }

@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
     if (microdiscord_recv_message(&bot, &msg) == SUCCESS) {
       printf("[%s] %s: %s\n", msg.id, msg.author, msg.content);
       
-      if (strcasecmp(msg.content, "ping") == 0) {
+      if (strcmp(msg.content, "ping") == 0) {
         microdiscord_send_message(&bot, "Pong! :ping_pong:");
       }
     }

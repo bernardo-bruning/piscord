@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#define SUCCESS 1
+#define SUCCESS 0
 #define ERR_BACKEND_NULL 1
 #define ERR_HTTP_ERROR 2
 
@@ -16,14 +16,14 @@ typedef struct Backend {
   int (*post)(Backend *self, const char *url, const char *headers, const char *body, char **response);
   void (*sleep)(Backend *self, int ms);
   void (*free_response)(Backend *self, char *response);
-  int (*json_scanf)(const char *json, const char *path, const char *fmt, ...);
+  int (*json_scanf)(const char *json, const char *path, const char *fmt, void *out, int max);
   int (*json_printf)(char *buf, size_t len, const char *fmt, ...);
   void* data;
 } Backend;
 
 typedef struct Message {
   char id[64];
-  char author[64];
+  char author[128];
   char content[2048];
 } Message;
 
@@ -44,12 +44,9 @@ int microdiscord_recv_message(MicroDiscord *self, Message *msg);
 
 int microdiscord_init(MicroDiscord *self, Backend *backend, char *token, char *guild_id, char *channel_id) {
   if (!backend) return ERR_BACKEND_NULL;
-  self->token = token;
-  self->guild_id = guild_id;
-  self->channel_id = channel_id;
+  self->token = token; self->guild_id = guild_id; self->channel_id = channel_id;
   self->base_url = "https://discord.com/api/v10";
-  self->backend = backend;
-  self->last_id[0] = '\0';
+  self->backend = backend; self->last_id[0] = '\0';
 
   char *res = NULL, headers[256], url[512];
   snprintf(headers, sizeof(headers), "Authorization: Bot %s\r\n", self->token);
@@ -57,26 +54,31 @@ int microdiscord_init(MicroDiscord *self, Backend *backend, char *token, char *g
   
   if (self->backend->get(self->backend, url, headers, &res) != SUCCESS || !res) return SUCCESS;
 
-  self->backend->json_scanf(res, "$[0].id", "%s", self->last_id);
+  self->backend->json_scanf(res, "$[0].id", "%s", self->last_id, sizeof(self->last_id));
   self->backend->free_response(self->backend, res);
   return SUCCESS;
 }
 
 int microdiscord_send_message(MicroDiscord *self, char *message) {
+  if (!self || !self->backend) return ERR_BACKEND_NULL;
   char url[512], body[2048], headers[256], *res = NULL;
   snprintf(url, sizeof(url), "%s/channels/%s/messages", self->base_url, self->channel_id);
-  self->backend->json_printf(body, sizeof(body), "{%Q: %Q}", "content", message);
+  
+  // Constrói o JSON manualmente para evitar problemas com escape no mg_vsnprintf
+  snprintf(body, sizeof(body), "{\"content\": \"%s\"}", message);
   snprintf(headers, sizeof(headers), "Authorization: Bot %s\r\nContent-Type: application/json\r\n", self->token);
 
   if (self->backend->post(self->backend, url, headers, body, &res) != SUCCESS) return ERR_HTTP_ERROR;
-  if (!res) return SUCCESS;
-
-  self->backend->json_scanf(res, "$.id", "%s", self->last_id);
-  self->backend->free_response(self->backend, res);
+  
+  if (res) {
+    self->backend->json_scanf(res, "$.id", "%s", self->last_id, sizeof(self->last_id));
+    self->backend->free_response(self->backend, res);
+  }
   return SUCCESS;
 }
 
 int microdiscord_recv_message(MicroDiscord *self, Message *msg) {
+  if (!self || !self->backend) return ERR_BACKEND_NULL;
   char url[512], headers[256];
   snprintf(headers, sizeof(headers), "Authorization: Bot %s\r\n", self->token);
 
@@ -93,17 +95,16 @@ int microdiscord_recv_message(MicroDiscord *self, Message *msg) {
       continue;
     }
 
-    if (self->backend->json_scanf(res, "$[0].id", "%s", new_id) != 1 || strcmp(new_id, self->last_id) == 0) {
+    if (self->backend->json_scanf(res, "$[0].id", "%s", new_id, sizeof(new_id)) != 1 || strcmp(new_id, self->last_id) == 0) {
       self->backend->free_response(self->backend, res);
       self->backend->sleep(self->backend, 5000);
       continue;
     }
 
-    // Preenche a struct Message com os dados extraidos
     strcpy(self->last_id, new_id);
     strcpy(msg->id, new_id);
-    self->backend->json_scanf(res, "$[0].content", "%s", msg->content);
-    self->backend->json_scanf(res, "$[0].author.username", "%s", msg->author);
+    self->backend->json_scanf(res, "$[0].content", "%s", msg->content, sizeof(msg->content));
+    self->backend->json_scanf(res, "$[0].author.username", "%s", msg->author, sizeof(msg->author));
 
     self->backend->free_response(self->backend, res);
     return SUCCESS; 
