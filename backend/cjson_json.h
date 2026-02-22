@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-static int cjson_encode(Piscord *self, char *buf, size_t len, struct JsonField *fields, int num) {
+static int cjson_encode(Piscord *self, char *buf, int len, struct JsonField *fields, int num) {
     cJSON *root = cJSON_CreateObject();
     for (int i = 0; i < num; i++) {
         switch (fields[i].type) {

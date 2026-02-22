@@ -47,9 +47,10 @@
 #ifndef PISCORD_H
 #define PISCORD_H
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#ifndef PISCORD_SNPRINTF
+  #include <stdio.h>
+  #define PISCORD_SNPRINTF snprintf
+#endif
 
 #ifndef PISCORD_BUFFER_SIZE
   #define PISCORD_BUFFER_SIZE 2048
@@ -83,10 +84,12 @@ typedef struct JsonField {
   int max;
 } JsonField;
 
+typedef struct { char data[64]; } PiscordId;
+
 typedef struct PiscordMessage {
   char content[PISCORD_BUFFER_SIZE];
   char author[64];
-  char id[64];
+  PiscordId id;
 } PiscordMessage;
 
 typedef struct Piscord Piscord;
@@ -95,26 +98,36 @@ typedef struct Piscord Piscord;
  * Backend callback types.
  */
 typedef int (*PiscordHttpRequestFn)(Piscord *self, char *url, int method, HttpHeader *headers, int headers_len, char *body, char *response, int len);
-typedef int (*PiscordJsonEncodeFn)(Piscord *self, char *buf, size_t len, struct JsonField *fields, int num);
+typedef int (*PiscordJsonEncodeFn)(Piscord *self, char *buf, int len, struct JsonField *fields, int num);
 typedef int (*PiscordJsonDecodeArrayFn)(Piscord *self, char *buf, int len, int num_objects, int num_fields, struct JsonField *fields_array);
+typedef void (*PiscordOnMessageFn)(Piscord *self, PiscordMessage *message);
 
 struct Piscord {
   char *token, *guild_id, *channel_id, *url;
-  char last_message_id[64];
+  PiscordId last_message_id;
   void *user_data; /* Reserved for client-side context */
   
   /* Callbacks - MUST be set by the user before calling API functions */
   PiscordHttpRequestFn http_request;
   PiscordJsonEncodeFn json_encode;
   PiscordJsonDecodeArrayFn json_decode_array;
+  PiscordOnMessageFn on_message;
 };
 
 /* --- Public API --- */
 
 /**
- * Initializes the Piscord context with Discord credentials.
+ * Initializes the Piscord context with Discord credentials and backend callbacks.
  */
-void piscord_init(struct Piscord *self, char *token, char *guild_id, char *channel_id);
+void piscord_init(struct Piscord *self, char *token, char *guild_id, char *channel_id,
+                  PiscordHttpRequestFn http_request, 
+                  PiscordJsonEncodeFn json_encode, 
+                  PiscordJsonDecodeArrayFn json_decode_array);
+
+/**
+ * Polls for new messages and triggers the on_message callback for each.
+ */
+int piscord_poll(struct Piscord *self);
 
 /**
  * Sends a plain text message to the configured channel.
@@ -135,16 +148,33 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
 
 #ifdef PISCORD_IMPLEMENTATION
 
-void piscord_init(Piscord *self, char *token, char *guild_id, char *channel_id) {
+void piscord_init(Piscord *self, char *token, char *guild_id, char *channel_id,
+                  PiscordHttpRequestFn http_request, 
+                  PiscordJsonEncodeFn json_encode, 
+                  PiscordJsonDecodeArrayFn json_decode_array) {
   self->url = "https://discord.com/api/v10";
   self->token = token;
   self->guild_id = guild_id;
   self->channel_id = channel_id;
-  self->last_message_id[0] = '\0';
+  self->last_message_id.data[0] = '\0';
   self->user_data = NULL;
-  self->http_request = NULL;
-  self->json_encode = NULL;
-  self->json_decode_array = NULL;
+  self->http_request = http_request;
+  self->json_encode = json_encode;
+  self->json_decode_array = json_decode_array;
+  self->on_message = NULL;
+}
+
+int piscord_poll(struct Piscord *self) {
+  PiscordMessage messages[5];
+  int count = piscord_recv_message(self, messages, 5);
+  
+  if (count > 0 && self->on_message) {
+    for (int i = 0; i < count; i++) {
+      self->on_message(self, &messages[i]);
+    }
+  }
+  
+  return count;
 }
 
 int piscord_send_message(struct Piscord *self, char *message) {
@@ -154,8 +184,8 @@ int piscord_send_message(struct Piscord *self, char *message) {
         token[PISCORD_BUFFER_SIZE];
   int err;
 
-  snprintf(token, sizeof(token), "Bot %s", self->token);
-  snprintf(url, sizeof(url), "%s/channels/%s/messages", self->url, self->channel_id);
+  PISCORD_SNPRINTF(token, sizeof(token), "Bot %s", self->token);
+  PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages", self->url, self->channel_id);
 
   HttpHeader headers[] = {
     {"Authorization", token},
@@ -193,15 +223,15 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
     JsonField *f = &fields[i * 3];
     f[0] = (JsonField){ "content",         PISCORD_JSON_STR_TYPE, messages[i].content, PISCORD_BUFFER_SIZE };
     f[1] = (JsonField){ "author.username", PISCORD_JSON_STR_TYPE, messages[i].author,  64 };
-    f[2] = (JsonField){ "id",              PISCORD_JSON_STR_TYPE, messages[i].id,      64 };
+    f[2] = (JsonField){ "id",              PISCORD_JSON_STR_TYPE, messages[i].id.data, 64 };
   }
 
-  snprintf(token, sizeof(token), "Bot %s", self->token);
+  PISCORD_SNPRINTF(token, sizeof(token), "Bot %s", self->token);
   
-  if (self->last_message_id[0] == '\0') {
-    snprintf(url, sizeof(url), "%s/channels/%s/messages?limit=%d", self->url, self->channel_id, num_messages);
+  if (self->last_message_id.data[0] == '\0') {
+    PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages?limit=%d", self->url, self->channel_id, num_messages);
   } else {
-    snprintf(url, sizeof(url), "%s/channels/%s/messages?limit=%d&after=%s", self->url, self->channel_id, num_messages, self->last_message_id);
+    PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages?limit=%d&after=%s", self->url, self->channel_id, num_messages, self->last_message_id.data);
   }
 
   if (!self->http_request) return PISCORD_ERR_HTTP_ERROR;
@@ -216,7 +246,7 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
     return PISCORD_FAILURE;
   }
 
-  strcpy(self->last_message_id, messages[0].id);
+  self->last_message_id = messages[0].id;
 
   return count;
 }
