@@ -65,6 +65,7 @@ const int PISCORD_SUCCESS = 1;
 const int PISCORD_FAILURE = 0;
 const int PISCORD_ERR_HTTP_ERROR = -1;
 const int PISCORD_ERR_JSON_ENCODE = -2;
+const int PISCORD_ERR_NO_MESSAGE_CALLBACK = -3;
 
 #define PISCORD_JSON_STR_TYPE 0
 #define PISCORD_JSON_INT_TYPE 1
@@ -167,6 +168,10 @@ void piscord_init(Piscord *self, char *token, char *guild_id, char *channel_id,
 int piscord_poll(struct Piscord *self) {
   PiscordMessage messages[5];
   int count = piscord_recv_message(self, messages, 5);
+
+  if(!self->on_message) {
+    return PISCORD_ERR_NO_MESSAGE_CALLBACK;
+  }
   
   if (count > 0 && self->on_message) {
     for (int i = 0; i < count; i++) {
