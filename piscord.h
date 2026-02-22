@@ -1,5 +1,41 @@
 /**
- * microdiscord.h - v0.1.0 - public domain - Bernardo de Olveira Bruning, February 2026
+ * microdiscord.h - v0.1.0 - public domain - Bernardo de Oliveira Bruning, February 2026
+ *
+ * microdiscord is a minimalist, single-header C library for interacting with the Discord API.
+ * It is designed to be highly portable and dependency-agnostic by using a callback-based
+ * backend system. You provide the HTTP and JSON implementations, and microdiscord
+ * handles the Discord-specific logic.
+ *
+ * USAGE:
+ *   #define PISCORD_IMPLEMENTATION
+ *   #include "piscord.h"
+ *
+ *   // 1. Initialize the bot
+ *   Piscord bot;
+ *   piscord_init(&bot, "YOUR_TOKEN", "GUILD_ID", "CHANNEL_ID");
+ *
+ *   // 2. Register your backends (e.g., using libcurl and cJSON)
+ *   bot.http_request = my_curl_request;
+ *   bot.json_encode = my_cjson_encode;
+ *   bot.json_decode_array = my_cjson_decode_array;
+ *
+ *   // 3. Use the API
+ *   piscord_send_message(&bot, "Hello world!");
+ *
+ * BACKEND SYSTEM:
+ *   This library does NOT include networking or JSON parsing code by default.
+ *   You must assign function pointers to the `Piscord` struct for:
+ *     - http_request: Perform GET/POST HTTPS requests.
+ *     - json_encode: Serialize a list of `JsonField` to a JSON string.
+ *     - json_decode_array: Parse a JSON array of objects into `JsonField` structures.
+ *
+ *   This allows you to use any library (libcurl, mbedtls, cJSON, Jansson, etc.)
+ *   or even platform-specific APIs without modifying microdiscord.h.
+ *
+ * LICENSE:
+ *   This software is in the public domain. Where that dedication is not recognized, 
+ *   you are granted a perpetual, irrevocable license to copy, distribute, 
+ *   and modify this file as you see fit.
  */
 
 #ifndef PISCORD_H
@@ -13,6 +49,8 @@
   #define PISCORD_BUFFER_SIZE 2048
 #endif
 
+/* --- Constants --- */
+
 #define PISCORD_HTTP_GET 0
 #define PISCORD_HTTP_POST 1
 
@@ -25,6 +63,8 @@ const int PISCORD_ERR_JSON_ENCODE = -2;
 #define PISCORD_JSON_INT_TYPE 1
 #define PISCORD_JSON_BOOL_TYPE 2
 #define PISCORD_JSON_ARRAY_TYPE 3
+
+/* --- Types --- */
 
 typedef struct HttpHeader {
   char *name, *value;
@@ -45,6 +85,9 @@ typedef struct PiscordMessage {
 
 typedef struct Piscord Piscord;
 
+/**
+ * Backend callback types.
+ */
 typedef int (*PiscordHttpRequestFn)(Piscord *self, char *url, int method, HttpHeader *headers, int headers_len, char *body, char *response, int len);
 typedef int (*PiscordJsonEncodeFn)(Piscord *self, char *buf, size_t len, struct JsonField *fields, int num);
 typedef int (*PiscordJsonDecodeArrayFn)(Piscord *self, char *buf, int len, int num_objects, int num_fields, struct JsonField *fields_array);
@@ -52,18 +95,37 @@ typedef int (*PiscordJsonDecodeArrayFn)(Piscord *self, char *buf, int len, int n
 struct Piscord {
   char *token, *guild_id, *channel_id, *url;
   char last_message_id[64];
-  void *user_data;
+  void *user_data; /* Reserved for client-side context */
   
+  /* Callbacks - MUST be set by the user before calling API functions */
   PiscordHttpRequestFn http_request;
   PiscordJsonEncodeFn json_encode;
   PiscordJsonDecodeArrayFn json_decode_array;
 };
 
+/* --- Public API --- */
+
+/**
+ * Initializes the Piscord context with Discord credentials.
+ */
 void piscord_init(struct Piscord *self, char *token, char *guild_id, char *channel_id);
+
+/**
+ * Sends a plain text message to the configured channel.
+ * Returns PISCORD_SUCCESS (1) on success.
+ */
 int piscord_send_message(struct Piscord *self, char *message);
+
+/**
+ * Fetches new messages from the configured channel.
+ * Only returns messages sent AFTER the last one received by this instance.
+ * Returns the number of messages received, or PISCORD_FAILURE (0) if none.
+ */
 int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num_messages);
 
-#endif // PISCORD_H
+#endif /* PISCORD_H */
+
+/* --- Implementation --- */
 
 #ifdef PISCORD_IMPLEMENTATION
 
@@ -131,7 +193,7 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
   snprintf(token, sizeof(token), "Bot %s", self->token);
   
   if (self->last_message_id[0] == '\0') {
-    snprintf(url, sizeof(url), "%s/channels/%s/messages?limit=1", self->url, self->channel_id, num_messages);
+    snprintf(url, sizeof(url), "%s/channels/%s/messages?limit=%d", self->url, self->channel_id, num_messages);
   } else {
     snprintf(url, sizeof(url), "%s/channels/%s/messages?limit=%d&after=%s", self->url, self->channel_id, num_messages, self->last_message_id);
   }
@@ -152,4 +214,4 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
 
   return count;
 }
-#endif // PISCORD_IMPLEMENTATION
+#endif /* PISCORD_IMPLEMENTATION */
