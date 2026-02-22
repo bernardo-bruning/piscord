@@ -1,8 +1,8 @@
-# microdiscord
+# piscord
 
 A minimalist, single-header C library for interacting with the Discord API.
 
-`microdiscord` follows the **STB-style library** philosophy: it's a single header file that provides the core logic while remaining completely dependency-agnostic. You bring your own networking (HTTP) and JSON parsing backends.
+`piscord` follows the **STB-style library** philosophy: it's a single header file that provides the core logic while remaining completely dependency-agnostic. You bring your own networking (HTTP) and JSON parsing backends.
 
 ## Features
 
@@ -32,7 +32,7 @@ int main() {
     bot.json_encode = cjson_encode;
     bot.json_decode_array = cjson_decode_array;
 
-    piscord_send_message(&bot, "Hello from microdiscord!");
+    piscord_send_message(&bot, "Hello from piscord!");
     return 0;
 }
 ```

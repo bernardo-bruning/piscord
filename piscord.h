@@ -1,9 +1,9 @@
 /**
- * microdiscord.h - v0.1.0 - public domain - Bernardo de Oliveira Bruning, February 2026
+ * piscord.h - v0.1.0 - public domain - Bernardo de Oliveira Bruning, February 2026
  *
- * microdiscord is a minimalist, single-header C library for interacting with the Discord API.
+ * piscord is a minimalist, single-header C library for interacting with the Discord API.
  * It is designed to be highly portable and dependency-agnostic by using a callback-based
- * backend system. You provide the HTTP and JSON implementations, and microdiscord
+ * backend system. You provide the HTTP and JSON implementations, and piscord
  * handles the Discord-specific logic.
  *
  * USAGE:
@@ -30,7 +30,7 @@
  *     - json_decode_array: Parse a JSON array of objects into `JsonField` structures.
  *
  *   This allows you to use any library (libcurl, mbedtls, cJSON, Jansson, etc.)
- *   or even platform-specific APIs without modifying microdiscord.h.
+ *   or even platform-specific APIs without modifying piscord.h.
  *
  * LICENSE:
  *   This software is in the public domain. Where that dedication is not recognized, 
@@ -154,7 +154,7 @@ int piscord_send_message(struct Piscord *self, char *message) {
   HttpHeader headers[] = {
     {"Authorization", token},
     {"Content-Type", "application/json"},
-    {"User-Agent", "Piscord (https://github.com/bernardo-bruning/microdiscord, 0.1.0)"}
+    {"User-Agent", "Piscord (https://github.com/bernardo-bruning/piscord, 0.1.0)"}
   };
   JsonField fields[] = {
     {"content", PISCORD_JSON_STR_TYPE, message, PISCORD_BUFFER_SIZE}
@@ -179,7 +179,7 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
   HttpHeader headers[] = {
     {"Authorization", token},
     {"Accept", "application/json"},
-    {"User-Agent", "Piscord (https://github.com/bernardo-bruning/microdiscord, 0.1.0)"}
+    {"User-Agent", "Piscord (https://github.com/bernardo-bruning/piscord, 0.1.0)"}
   };
   
   JsonField fields[num_messages * 3];
