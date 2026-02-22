@@ -1,46 +1,34 @@
-#ifndef MG_TLS
-#define MG_TLS 2
-#endif
+#include <stdio.h>
+#include <string.h>
 
-#define MICRODISCORD_IMPLEMENTATION
-#include "microdiscord.h"
-#include "backends/mongoose_backend.c"
+#define PISCORD_IMPLEMENTATION
+#define PISCORD_HTTP_REQUEST(ctx, url, method, headers, body, response, len) (printf("HTTP REQUEST: %s\n", url), 200)
+#define PISCORD_JSON_ENCODE(ctx, buf, len, fields, num) (printf("JSON ENCODE\n"), 1)
+#define PISCORD_JSON_DECODE(ctx, json, buf, len) (printf("JSON DECODE\n"), 0)
+#define PISCORD_SPRINTF(ctx, buf, len, fmt, ...) snprintf(buf, len, fmt, __VA_ARGS__)
 
-/**
- * Exemplo de Bot com struct Message.
- * 
- * Compilacao:
- * gcc -o example example.c backends/mongoose.c -DMG_TLS=2 -lssl -lcrypto -lpthread
- */
+#include "piscord.h"
+
+int my_json_encode(PISCORD_CONTEXT *ctx, char *buf, size_t len, JsonField *fields, int num) {
+  for (int i = 0; i < num; i++) {
+    snprintf(buf, len, "%s: %s", fields[i].name, fields[i].target);
+  }
+  printf("JSON: %s\n", buf);
+  return PISCORD_SUCCESS;
+}
 
 int main(int argc, char *argv[]) {
-  extern int mg_log_level;
-  mg_log_level = 0;
-
-  if (argc < 4) {
-    fprintf(stderr, "Uso: %s <token> <guild_id> <channel_id>\n", argv[0]);
-    return 1;
+  struct Piscord discord;
+  piscord_init(&discord, "YOUR_TOKEN", "GUILD_ID", "CHANNEL_ID");
+  
+  printf("Sending message...\n");
+  int result = piscord_send_message(&discord, NULL, "Hello from microdiscord!");
+  
+  if (result == PISCORD_SUCCESS) {
+    printf("Message sent successfully!\n");
+  } else {
+    printf("Failed to send message: %d\n", result);
   }
 
-  Backend *mg = microdiscord_mongoose_backend_new();
-  MicroDiscord bot;
-  microdiscord_init(&bot, mg, argv[1], argv[2], argv[3]);
-
-  printf("--- MicroDiscord Bot Iniciado ---\n");
-
-  while (1) {
-    Message msg;
-    printf("Aguardando...\n");
-    
-    if (microdiscord_recv_message(&bot, &msg) == SUCCESS) {
-      printf("[%s] %s: %s\n", msg.id, msg.author, msg.content);
-      
-      if (strcmp(msg.content, "ping") == 0) {
-        microdiscord_send_message(&bot, "Pong! :ping_pong:");
-      }
-    }
-  }
-
-  free(mg);
   return 0;
 }
