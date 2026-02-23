@@ -149,6 +149,16 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
 
 #ifdef PISCORD_IMPLEMENTATION
 
+/* Internal minimal string utilities to avoid libc dependency */
+static void piscord_internal_strcpy(char *dest, const char *src) {
+  while ((*dest++ = *src++));
+}
+
+static void piscord_internal_strcat(char *dest, const char *src) {
+  while (*dest) dest++;
+  while ((*dest++ = *src++));
+}
+
 void piscord_init(Piscord *self, char *token, char *guild_id, char *channel_id,
                   PiscordHttpRequestFn http_request, 
                   PiscordJsonEncodeFn json_encode, 
@@ -234,7 +244,7 @@ int piscord_recv_message(struct Piscord *self, PiscordMessage *messages, int num
   PISCORD_SNPRINTF(token, sizeof(token), "Bot %s", self->token);
   
   if (self->last_message_id.data[0] == '\0') {
-    PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages?limit=%d", self->url, self->channel_id, num_messages);
+    PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages?limit=1", self->url, self->channel_id, num_messages);
   } else {
     PISCORD_SNPRINTF(url, sizeof(url), "%s/channels/%s/messages?limit=%d&after=%s", self->url, self->channel_id, num_messages, self->last_message_id.data);
   }

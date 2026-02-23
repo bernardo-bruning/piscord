@@ -1,16 +1,23 @@
+CC ?= tcc
 CFLAGS = $(shell pkg-config --cflags libcurl libcjson)
 LDFLAGS = $(shell pkg-config --libs libcurl libcjson)
 
 all: piscord
 
 piscord: example.o
-	gcc -o piscord example.o $(LDFLAGS)
+	$(CC) -o piscord example.o $(LDFLAGS)
 
 example.o: example.c piscord.h
-	gcc -c example.c $(CFLAGS)
+	$(CC) -c example.c $(CFLAGS)
 
 clean:
-	rm -f piscord example.o
+	rm -f piscord example.o tests/test_piscord
 
 run: piscord
 	./piscord
+
+test: tests/test_piscord
+	./tests/test_piscord
+
+tests/test_piscord: tests/test_piscord.c piscord.h
+	$(CC) -o tests/test_piscord tests/test_piscord.c -I.
