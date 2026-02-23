@@ -1,3 +1,0 @@
-[submodule "include/tap-h"]
-	path = includes/tap-h
-	url = https://github.com/bernardo-bruning/tap-h

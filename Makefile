@@ -19,5 +19,9 @@ run: piscord
 test: tests/test_piscord
 	./tests/test_piscord
 
-tests/test_piscord: tests/test_piscord.c piscord.h
+includes/tap.h:
+	mkdir -p includes
+	curl -sSL https://raw.githubusercontent.com/bernardo-bruning/tap-h/master/tap.h -o includes/tap.h
+
+tests/test_piscord: tests/test_piscord.c piscord.h includes/tap.h
 	$(CC) -o tests/test_piscord tests/test_piscord.c -I.
